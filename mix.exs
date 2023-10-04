@@ -21,9 +21,14 @@ defmodule PhoenixEtag.Mixfile do
   end
 
   defp deps do
-    [{:phoenix, "~> 1.2"},
+    [
+     {:phoenix, "~> 1.2"},
      {:plug, "~> 1.0"},
-     {:ex_doc, "~> 0.14", only: :dev}]
+     {:ex_doc, "~> 0.14", only: :dev},
+     {:phoenix_view, "~> 2.0", only: :test},
+     {:phoenix_html, "~>3.3", only: :test},
+     {:jason, "~>1.4", only: :test},
+    ]
   end
 
   defp description do

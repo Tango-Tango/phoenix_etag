@@ -10,8 +10,7 @@ defmodule PhoenixETagTest do
     use Phoenix.View, root: "does-not-matter"
 
     def stale_checks("show." <> _format, %{data: data}) do
-      [etag: PhoenixETag.schema_etag(data),
-       last_modified: PhoenixETag.schema_last_modified(data)]
+      [etag: PhoenixETag.schema_etag(data), last_modified: PhoenixETag.schema_last_modified(data)]
     end
 
     def render("show.json", %{data: data}) do
@@ -22,7 +21,9 @@ defmodule PhoenixETagTest do
       "Template for id: #{data.id}"
     end
 
-    def render("inner.html", %{view_module: mod, view_template: tmpl}) do
+    def render("inner.html", %{conn: conn}) do
+      mod = Phoenix.Controller.view_module(conn)
+      tmpl = Phoenix.Controller.view_template(conn)
       "View module is #{mod} and view template is #{tmpl}."
     end
   end
@@ -32,7 +33,11 @@ defmodule PhoenixETagTest do
 
     def render("app.html", %{data: data} = assigns) do
       "Layout for id: #{data.id}\n" <>
-        render(assigns.view_module, assigns.view_template, assigns)
+        render(
+          Phoenix.Controller.view_module(assigns.conn),
+          Phoenix.Controller.view_template(assigns.conn),
+          assigns
+        )
     end
   end
 
@@ -75,7 +80,7 @@ defmodule PhoenixETagTest do
     end
 
     test "with multiple resources" do
-      now = DateTime.utc_now
+      now = DateTime.utc_now()
       schema = [%Schema{updated_at: @naive}, %Schema{updated_at: now}]
       assert schema_last_modified(schema) == now
     end
@@ -191,12 +196,16 @@ defmodule PhoenixETagTest do
 
     test "render with layout sets view_module/template for layout and inner view" do
       conn = render(conn(), "inner.html", data: schema(), layout: {Layout, :app})
-      assert conn.resp_body == "Layout for id: 1\nView module is Elixir.PhoenixETagTest.View and view template is inner.html."
+
+      assert conn.resp_body ==
+               "Layout for id: 1\nView module is Elixir.PhoenixETagTest.View and view template is inner.html."
     end
 
     test "render without layout sets inner view_module/template assigns" do
       conn = render(conn(), "inner.html", [])
-      assert conn.resp_body == "View module is Elixir.PhoenixETagTest.View and view template is inner.html."
+
+      assert conn.resp_body ==
+               "View module is Elixir.PhoenixETagTest.View and view template is inner.html."
     end
 
     test "renders with conn status code" do
@@ -206,7 +215,8 @@ defmodule PhoenixETagTest do
     end
 
     test "skips layout depending on layout_formats with string template" do
-      conn = layout_conn() |> put_layout_formats([]) |> render_if_stale("show.html", data: schema())
+      conn = layout_conn() |> put_layout([]) |> render_if_stale("show.html", data: schema())
+
       assert conn.resp_body =~ "Template"
       assert html_response?(conn)
 
@@ -216,7 +226,7 @@ defmodule PhoenixETagTest do
 
     test "skips layout depending on layout_formats with atom template" do
       conn = put_format(layout_conn(), "html")
-      conn = conn |> put_layout_formats([]) |> render_if_stale(:show, data: schema())
+      conn = conn |> put_layout([]) |> render_if_stale(:show, data: schema())
       assert conn.resp_body =~ "Template"
       assert html_response?(conn)
 
@@ -247,14 +257,14 @@ defmodule PhoenixETagTest do
 
     test "uses action name" do
       conn = put_format(conn(), "html")
-      conn = put_in conn.private[:phoenix_action], :show
+      conn = put_in(conn.private[:phoenix_action], :show)
       conn = render(conn, data: schema())
       assert conn.resp_body =~ "id: 1"
     end
 
     test "render/3 renders with View and Template with atom for template" do
       conn = put_format(conn(), "json")
-      conn = put_in conn.private[:phoenix_action], :show
+      conn = put_in(conn.private[:phoenix_action], :show)
       conn = put_view(conn, nil)
       conn = assign(conn, :data, schema())
       conn = render_if_stale(conn, View, :show)
@@ -263,7 +273,7 @@ defmodule PhoenixETagTest do
 
     test "render/3 renders with View and Template" do
       conn = put_format(conn(), "json")
-      conn = put_in conn.private[:phoenix_action], :show
+      conn = put_in(conn.private[:phoenix_action], :show)
       conn = put_view(conn, nil)
       conn = assign(conn, :data, schema())
       conn = render_if_stale(conn, View, "show.json")
@@ -272,7 +282,7 @@ defmodule PhoenixETagTest do
 
     test "render/4 renders with View and Template" do
       conn = put_format(conn(), "html")
-      conn = put_in conn.private[:phoenix_action], :show
+      conn = put_in(conn.private[:phoenix_action], :show)
       conn = put_view(conn, nil)
       conn = render_if_stale(conn, View, "show.html", data: schema())
       assert conn.resp_body =~ "id: 1"
@@ -289,7 +299,7 @@ defmodule PhoenixETagTest do
     end
 
     test "errors when rendering without view" do
-      assert_raise RuntimeError, ~r/a view module was not specified/, fn ->
+      assert_raise RuntimeError, ~r/no view was found/, fn ->
         render_if_stale(conn() |> put_view(nil), "show.html")
       end
     end
