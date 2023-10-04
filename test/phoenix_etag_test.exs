@@ -31,7 +31,11 @@ defmodule PhoenixETagTest do
 
     def render("app.html", %{data: data} = assigns) do
       "Layout for id: #{data.id}\n" <>
-        render(assigns.view_module, assigns.view_template, assigns)
+        render(
+          Phoenix.Controller.view_module(assigns.conn),
+          Phoenix.Controller.view_template(assigns.conn),
+          assigns
+        )
     end
   end
 
@@ -209,8 +213,7 @@ defmodule PhoenixETagTest do
     end
 
     test "skips layout depending on layout_formats with string template" do
-      conn =
-        layout_conn() |> put_layout_formats([]) |> render_if_stale("show.html", data: schema())
+      conn = layout_conn() |> put_layout([]) |> render_if_stale("show.html", data: schema())
 
       assert conn.resp_body =~ "Template"
       assert html_response?(conn)
@@ -221,7 +224,7 @@ defmodule PhoenixETagTest do
 
     test "skips layout depending on layout_formats with atom template" do
       conn = put_format(layout_conn(), "html")
-      conn = conn |> put_layout_formats([]) |> render_if_stale(:show, data: schema())
+      conn = conn |> put_layout([]) |> render_if_stale(:show, data: schema())
       assert conn.resp_body =~ "Template"
       assert html_response?(conn)
 
