@@ -49,12 +49,13 @@ defmodule PhoenixETagTest do
   @naive ~N[2017-02-16 16:28:05.967734]
   @date DateTime.from_naive!(@naive, "Etc/UTC")
   @etag "W/ 34d2cbd4b03b46274fd784fb792a57f4"
+  @etag_empty_list "W/ a52eab6056871e78f2296dc6d1f4aaaf"
   @last_modified "Thu, 16 Feb 2017 16:28:05 GMT"
 
   describe "schema_etag/1" do
     test "with empty result" do
       assert schema_etag(nil) == nil
-      assert schema_etag([]) == nil
+      assert schema_etag([]) == @etag_empty_list
     end
 
     test "with a single resource" do

@@ -48,16 +48,15 @@ defmodule PhoenixETag do
   """
   @spec schema_etag(nil | schema | [schema]) :: etag
   def schema_etag(nil), do: nil
-  def schema_etag([]), do: nil
 
   def schema_etag(schema_or_schemas) do
-    list =
-      Enum.map(List.wrap(schema_or_schemas), fn schema ->
-        [schema.__struct__, schema.id, NaiveDateTime.to_erl(schema.updated_at)]
-      end)
-
-    binary = :erlang.term_to_binary(list)
-    "W/ " <> Base.encode16(:crypto.hash(:md5, binary), case: :lower)
+    schema_or_schemas
+    |> List.wrap()
+    |> Enum.map(&[&1.__struct__, &1.id, NaiveDateTime.to_erl(&1.updated_at)])
+    |> :erlang.term_to_binary()
+    |> :erlang.md5()
+    |> Base.encode16(case: :lower)
+    |> then(&"W/ #{&1}")
   end
 
   @doc """
