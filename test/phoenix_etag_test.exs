@@ -135,8 +135,7 @@ defmodule PhoenixETagTest do
 
     test "responds with 304 for fresh content based on etag" do
       testcases = [
-        [],
-        200,
+        {[], 200},
         {[etag: nil], 200},
         {[etag: "W/ etag2"], 200},
         {[etag: "W/ etag2", last_modified: @date], 200},
@@ -166,6 +165,23 @@ defmodule PhoenixETagTest do
       for {date, expected_status} <- testcases do
         conn = put_req_header(conn(), "if-modified-since", @last_modified)
         conn = render_if_stale(conn, "show.html", checks: [last_modified: date])
+        assert conn.status == expected_status
+        assert conn.state == :sent
+      end
+    end
+
+    test "if-none-match takes precence if both headers are present" do
+      testcases = [
+        {@date, @etag, 304},
+        {@date, "other-etag", 304},
+        {DateTime.add(@date, 1, :second), @etag, 304},
+        {DateTime.add(@date, -1, :second), @etag, 304}
+      ]
+
+      for {date, etag, expected_status} <- testcases do
+        conn = put_req_header(conn(), "if-modified-since", @last_modified)
+        conn = put_req_header(conn, "if-none-match", @etag)
+        conn = render_if_stale(conn, "show.html", checks: [last_modified: date, etag: etag])
         assert conn.status == expected_status
         assert conn.state == :sent
       end
