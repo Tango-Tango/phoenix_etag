@@ -13,18 +13,28 @@ defmodule PhoenixETagTest do
       [etag: PhoenixETag.schema_etag(data), last_modified: PhoenixETag.schema_last_modified(data)]
     end
 
+    def stale_checks("show." <> _format, %{checks: checks}), do: checks
+
     def render("show.json", %{data: data}) do
       %{id: data.id}
     end
 
-    def render("show.html", %{data: data}) do
-      "Template for id: #{data.id}"
+    def render("show.html", %{data: %{id: id}}) do
+      "Template for id: #{id}"
+    end
+
+    def render("show.html", %{data: d}) do
+      "Template for: #{inspect(d)}"
     end
 
     def render("inner.html", %{conn: conn}) do
       mod = Phoenix.Controller.view_module(conn)
       tmpl = Phoenix.Controller.view_template(conn)
       "View module is #{mod} and view template is #{tmpl}."
+    end
+
+    def render("show." <> _format, %{checks: checks}) do
+      "Template for checks: #{inspect(checks)}"
     end
   end
 
@@ -89,41 +99,92 @@ defmodule PhoenixETagTest do
 
   describe "render_if_stale" do
     test "responds with etag" do
-      conn = render_if_stale(conn(), "show.html", data: schema())
+      conn = render_if_stale(conn(), "show.html", checks: [etag: @etag])
       assert get_resp_header(conn, "etag") == [@etag]
+      assert get_resp_header(conn, "last-modified") == []
       assert conn.status == 200
     end
 
     test "responds with last-modified" do
-      conn = render_if_stale(conn(), "show.html", data: schema())
+      conn = render_if_stale(conn(), "show.html", checks: [last_modified: @date])
       assert get_resp_header(conn, "last-modified") == [@last_modified]
+      assert get_resp_header(conn, "etag") == []
       assert conn.status == 200
     end
 
-    test "respnds with 304 for fresh content based on etag" do
-      conn = put_req_header(conn(), "if-none-match", @etag)
-      conn = render_if_stale(conn, "show.html", data: schema())
-      assert conn.status == 304
-      assert conn.state == :sent
+    test "responds with both" do
+      conn = render_if_stale(conn(), "show.html", checks: [last_modified: @date, etag: @etag])
+      assert get_resp_header(conn, "last-modified") == [@last_modified]
+      assert get_resp_header(conn, "etag") == [@etag]
+      assert conn.status == 200
+    end
+
+    test "responds with neither" do
+      testcases = [
+        [],
+        [last_modified: nil, etag: nil]
+      ]
+
+      for checks <- testcases do
+        conn = render_if_stale(conn(), "show.html", checks: checks)
+        assert get_resp_header(conn, "last-modified") == []
+        assert get_resp_header(conn, "etag") == []
+        assert conn.status == 200
+      end
+    end
+
+    test "responds with 304 for fresh content based on etag" do
+      testcases = [
+        {[], 200},
+        {[etag: nil], 200},
+        {[etag: "W/ etag2"], 200},
+        {[etag: "W/ etag2", last_modified: @date], 200},
+        {[etag: nil, last_modified: @date], 200},
+        {[etag: "W/ etag1"], 304},
+        {[etag: "W/ etag1", last_modified: nil], 304},
+        {[etag: "W/ etag1", last_modified: @date], 304}
+      ]
+
+      for {checks, expected_status} <- testcases do
+        conn = put_req_header(conn(), "if-none-match", "W/ etag1")
+        conn = render_if_stale(conn, "show.html", checks: checks)
+        assert conn.status == expected_status
+        assert conn.state == :sent
+      end
     end
 
     test "responds with 304 for fresh content based on last_modified" do
-      conn = put_req_header(conn(), "if-modified-since", @last_modified)
-      conn = render_if_stale(conn, "show.html", data: schema())
-      assert conn.status == 304
-      assert conn.state == :sent
+      testcases = [
+        {@date, 304},
+        {@naive, 304},
+        {DateTime.add(@date, -1, :second), 304},
+        {DateTime.add(@date, 1, :second), 200},
+        {nil, 200}
+      ]
+
+      for {date, expected_status} <- testcases do
+        conn = put_req_header(conn(), "if-modified-since", @last_modified)
+        conn = render_if_stale(conn, "show.html", checks: [last_modified: date])
+        assert conn.status == expected_status
+        assert conn.state == :sent
+      end
     end
 
-    test "skips if etag does not match" do
-      conn = put_req_header(conn(), "if-none-match", "bad value")
-      conn = render_if_stale(conn, "show.html", data: schema())
-      assert conn.status == 200
-    end
+    test "if-none-match takes precence if both headers are present" do
+      testcases = [
+        {@date, @etag, 304},
+        {@date, "other-etag", 304},
+        {DateTime.add(@date, 1, :second), @etag, 304},
+        {DateTime.add(@date, -1, :second), @etag, 304}
+      ]
 
-    test "skips if last_modified does not match" do
-      conn = put_req_header(conn(), "if-modified-since", "Thu, 16 Feb 2016 16:28:05 GMT")
-      conn = render_if_stale(conn, "show.html", data: schema())
-      assert conn.status == 200
+      for {date, etag, expected_status} <- testcases do
+        conn = put_req_header(conn(), "if-modified-since", @last_modified)
+        conn = put_req_header(conn, "if-none-match", @etag)
+        conn = render_if_stale(conn, "show.html", checks: [last_modified: date, etag: etag])
+        assert conn.status == expected_status
+        assert conn.state == :sent
+      end
     end
   end
 

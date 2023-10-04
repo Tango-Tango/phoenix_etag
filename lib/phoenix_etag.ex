@@ -192,10 +192,10 @@ defmodule PhoenixETag do
       |> put_etag(etag)
       |> put_last_modified(modified)
 
-    if stale?(conn, etag, modified) do
-      fun.(conn, Map.take(conn.assigns, [:layout]))
-    else
+    if fresh?(conn, etag, modified) do
       Plug.Conn.send_resp(conn, 304, "")
+    else
+      fun.(conn, Map.take(conn.assigns, [:layout]))
     end
   end
 
@@ -212,36 +212,34 @@ defmodule PhoenixETag do
     Plug.Conn.put_resp_header(conn, "last-modified", format_date(modified))
   end
 
-  defp stale?(conn, etag, modified) do
+  defp fresh?(conn, etag, modified) do
     modified_since = List.first(Plug.Conn.get_req_header(conn, "if-modified-since"))
     none_match = List.first(Plug.Conn.get_req_header(conn, "if-none-match"))
 
-    if get_or_head?(conn) and (modified_since || none_match) do
-      modified_since?(modified_since, modified) or none_match?(none_match, etag)
-    else
-      true
-    end
+    !get_or_head?(conn) ||
+      none_match_fresh?(none_match, etag) ||
+      modified_since_fresh?(modified_since, modified)
   end
 
   defp get_or_head?(%{method: method}), do: method in ["GET", "HEAD"]
 
-  defp modified_since?(header, last_modified) do
-    if header && last_modified do
-      modified_since = parse_date(header)
-      last_modified = to_unix(last_modified)
-      last_modified > modified_since
-    else
-      false
-    end
+  defp modified_since_fresh?(header, last_modified)
+  defp modified_since_fresh?(nil, _), do: false
+  defp modified_since_fresh?(_, nil), do: false
+
+  defp modified_since_fresh?(header, last_modified) do
+    modified_since = parse_date(header)
+    last_modified = to_unix(last_modified)
+    last_modified <= modified_since
   end
 
-  defp none_match?(none_match, etag) do
-    if none_match && etag do
-      none_match = Plug.Conn.Utils.list(none_match)
-      etag not in none_match and "*" not in none_match
-    else
-      false
-    end
+  defp none_match_fresh?(none_match, etag)
+  defp none_match_fresh?(_, nil), do: false
+  defp none_match_fresh?(nil, _), do: false
+
+  defp none_match_fresh?(none_match, etag) do
+    none_match = Plug.Conn.Utils.list(none_match)
+    etag in none_match or "*" in none_match
   end
 
   defp to_unix(%DateTime{} = dt), do: DateTime.to_unix(dt)
