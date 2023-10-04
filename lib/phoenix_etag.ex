@@ -36,8 +36,8 @@ defmodule PhoenixETag do
   render proceeds as normal, except the extra headers are added to the response.
   """
 
-  @type schema :: %{__struct__: atom, id: term, updated_at: Calendar.date_time}
-  @type etag :: String.t
+  @type schema :: %{__struct__: atom, id: term, updated_at: Calendar.date_time()}
+  @type etag :: String.t()
 
   @doc """
   Utility function for generating etag values from schemas.
@@ -49,10 +49,12 @@ defmodule PhoenixETag do
   @spec schema_etag(nil | schema | [schema]) :: etag
   def schema_etag(nil), do: nil
   def schema_etag([]), do: nil
+
   def schema_etag(schema_or_schemas) do
-    list = Enum.map(List.wrap(schema_or_schemas), fn schema ->
-      [schema.__struct__, schema.id, NaiveDateTime.to_erl(schema.updated_at)]
-    end)
+    list =
+      Enum.map(List.wrap(schema_or_schemas), fn schema ->
+        [schema.__struct__, schema.id, NaiveDateTime.to_erl(schema.updated_at)]
+      end)
 
     binary = :erlang.term_to_binary(list)
     "W/ " <> Base.encode16(:crypto.hash(:md5, binary), case: :lower)
@@ -64,13 +66,14 @@ defmodule PhoenixETag do
   This function expects the schema to define a `updated_at` field of either
   `:utc_datetime` or `:naive_datetime` type.
   """
-  @spec schema_last_modified(nil | schema | [schema]) :: Calendar.date_time
+  @spec schema_last_modified(nil | schema | [schema]) :: Calendar.date_time()
   def schema_last_modified(nil), do: nil
   def schema_last_modified([]), do: nil
+
   def schema_last_modified(schema_or_schemas) do
     schema_or_schemas
-    |> List.wrap
-    |> Enum.map(&(&1.updated_at))
+    |> List.wrap()
+    |> Enum.map(& &1.updated_at)
     |> Enum.max_by(&NaiveDateTime.to_erl/1)
   end
 
@@ -80,7 +83,7 @@ defmodule PhoenixETag do
 
   See `render_if_stale/3` for more information.
   """
-  @spec render_if_stale(Plug.Conn.t, Keyword.t | map | binary | atom) :: Plug.Conn.t
+  @spec render_if_stale(Plug.Conn.t(), Keyword.t() | map | binary | atom) :: Plug.Conn.t()
   def render_if_stale(conn, template_or_assigns \\ [])
 
   def render_if_stale(conn, template) when is_binary(template) or is_atom(template) do
@@ -111,13 +114,14 @@ defmodule PhoenixETag do
 
   See `Phoenix.Controller.render/3` for more information.
   """
-  @spec render_if_stale(Plug.Conn.t, binary | atom, Keyword.t | map) :: Plug.Conn.t
+  @spec render_if_stale(Plug.Conn.t(), binary | atom, Keyword.t() | map) :: Plug.Conn.t()
   def render_if_stale(conn, template, assigns)
       when is_atom(template) and (is_list(assigns) or is_map(assigns)) do
     format =
       Phoenix.Controller.get_format(conn) ||
-      raise "cannot render template #{inspect template} because conn.params[\"_format\"] is not set. " <>
-            "Please set `plug :accepts, ~w(html json ...)` in your pipeline."
+        raise "cannot render template #{inspect(template)} because conn.params[\"_format\"] is not set. " <>
+                "Please set `plug :accepts, ~w(html json ...)` in your pipeline."
+
     template = template_name(template, format)
     do_render_if_stale(conn, template, assigns)
   end
@@ -129,9 +133,10 @@ defmodule PhoenixETag do
         # We need to do this check before trying to ask for stale checks,
         # otherwise we'll hit FunctionClauseError in view instead of this one
         do_render_if_stale(conn, template, assigns)
+
       "" ->
-        raise "cannot render template #{inspect template} without format. Use an atom if the " <>
-              "template format is meant to be set dynamically based on the request format"
+        raise "cannot render template #{inspect(template)} without format. Use an atom if the " <>
+                "template format is meant to be set dynamically based on the request format"
     end
   end
 
@@ -150,7 +155,7 @@ defmodule PhoenixETag do
       |> render_if_stale(template, assigns)
 
   """
-  @spec render_if_stale(Plug.Conn.t, atom, atom | binary, Keyword.t | map) :: Plug.Conn.t
+  @spec render_if_stale(Plug.Conn.t(), atom, atom | binary, Keyword.t() | map) :: Plug.Conn.t()
   def render_if_stale(conn, view, template, assigns)
       when is_atom(view) and (is_binary(template) or is_atom(template)) do
     conn
@@ -159,8 +164,10 @@ defmodule PhoenixETag do
   end
 
   defp do_render_if_stale(conn, template, assigns) do
-    view = Phoenix.Controller.view_module(conn) ||
-      raise "a view module was not specified, set one with put_view/2"
+    view =
+      Phoenix.Controller.view_module(conn) ||
+        raise "a view module was not specified, set one with put_view/2"
+
     conn
     |> prepare_assigns(assigns)
     |> if_stale(view, template, &Phoenix.Controller.render(&1, template, &2))
@@ -168,11 +175,12 @@ defmodule PhoenixETag do
 
   defp template_name(name, format) when is_atom(name),
     do: Atom.to_string(name) <> "." <> format
+
   defp template_name(name, _format) when is_binary(name),
     do: name
 
   defp prepare_assigns(conn, assigns) do
-    update_in conn.assigns, &Enum.into(assigns, &1)
+    update_in(conn.assigns, &Enum.into(assigns, &1))
   end
 
   defp if_stale(conn, view, template, fun) do
@@ -194,18 +202,20 @@ defmodule PhoenixETag do
 
   defp put_etag(conn, nil),
     do: conn
+
   defp put_etag(conn, etag),
     do: Plug.Conn.put_resp_header(conn, "etag", etag)
 
   defp put_last_modified(conn, nil),
     do: conn
+
   defp put_last_modified(conn, modified) do
     Plug.Conn.put_resp_header(conn, "last-modified", format_date(modified))
   end
 
   defp stale?(conn, etag, modified) do
-    modified_since = List.first Plug.Conn.get_req_header(conn, "if-modified-since")
-    none_match     = List.first Plug.Conn.get_req_header(conn, "if-none-match")
+    modified_since = List.first(Plug.Conn.get_req_header(conn, "if-modified-since"))
+    none_match = List.first(Plug.Conn.get_req_header(conn, "if-none-match"))
 
     if get_or_head?(conn) and (modified_since || none_match) do
       modified_since?(modified_since, modified) or none_match?(none_match, etag)
@@ -229,7 +239,7 @@ defmodule PhoenixETag do
   defp none_match?(none_match, etag) do
     if none_match && etag do
       none_match = Plug.Conn.Utils.list(none_match)
-      not(etag in none_match) and not("*" in none_match)
+      etag not in none_match and "*" not in none_match
     else
       false
     end
@@ -240,15 +250,15 @@ defmodule PhoenixETag do
 
   defp format_date(datetime) do
     datetime
-    |> NaiveDateTime.to_erl
-    |> :phoenix_etag_date.rfc1123
+    |> NaiveDateTime.to_erl()
+    |> :phoenix_etag_date.rfc1123()
   end
 
   defp parse_date(string) do
     string
-    |> :phoenix_etag_date.parse_date
-    |> NaiveDateTime.from_erl!
+    |> :phoenix_etag_date.parse_date()
+    |> NaiveDateTime.from_erl!()
     |> DateTime.from_naive!("Etc/UTC")
-    |> DateTime.to_unix
+    |> DateTime.to_unix()
   end
 end
