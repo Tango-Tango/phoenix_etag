@@ -21,7 +21,9 @@ defmodule PhoenixETagTest do
       "Template for id: #{data.id}"
     end
 
-    def render("inner.html", %{view_module: mod, view_template: tmpl}) do
+    def render("inner.html", %{conn: conn}) do
+      mod = Phoenix.Controller.view_module(conn)
+      tmpl = Phoenix.Controller.view_template(conn)
       "View module is #{mod} and view template is #{tmpl}."
     end
   end
@@ -297,7 +299,7 @@ defmodule PhoenixETagTest do
     end
 
     test "errors when rendering without view" do
-      assert_raise RuntimeError, ~r/a view module was not specified/, fn ->
+      assert_raise RuntimeError, ~r/no view was found/, fn ->
         render_if_stale(conn() |> put_view(nil), "show.html")
       end
     end
