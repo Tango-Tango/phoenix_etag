@@ -186,6 +186,24 @@ defmodule PhoenixETagTest do
         assert conn.state == :sent
       end
     end
+
+    test "only GET and HEAD return 304" do
+      testcases = [
+        {"GET", 304},
+        {"HEAD", 304},
+        {"POST", 200},
+        {"PUT", 200},
+        {"PATCH", 200},
+        {"DELETE", 200}
+      ]
+
+      for {method, expected_status} <- testcases do
+        conn = put_req_header(conn(), "if-none-match", @etag)
+        conn = %{conn | method: method}
+        conn = render_if_stale(conn, "show.html", checks: [etag: @etag])
+        assert conn.status == expected_status
+      end
+    end
   end
 
   describe "phoenix render" do

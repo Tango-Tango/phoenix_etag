@@ -216,9 +216,9 @@ defmodule PhoenixETag do
     modified_since = List.first(Plug.Conn.get_req_header(conn, "if-modified-since"))
     none_match = List.first(Plug.Conn.get_req_header(conn, "if-none-match"))
 
-    !get_or_head?(conn) ||
-      none_match_fresh?(none_match, etag) ||
-      modified_since_fresh?(modified_since, modified)
+    get_or_head?(conn) &&
+      (none_match_fresh?(none_match, etag) ||
+         modified_since_fresh?(modified_since, modified))
   end
 
   defp get_or_head?(%{method: method}), do: method in ["GET", "HEAD"]
